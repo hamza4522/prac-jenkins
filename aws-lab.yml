@@ -1,0 +1,286 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Master stack: PathToMasterStackFile'
+Resources:
+  VPC: 
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+       - Key: Name
+         Value: fingo
+​
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: "eu-west-2a"
+      Tags:
+      - Key: Name
+        Value: PublicSubnet1
+​
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: "eu-west-2b"
+      Tags:
+      - Key: Name
+        Value: PublicSubnet2
+​
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: "eu-west-2a"
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet1
+​
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: "eu-west-2b"
+      Tags:
+      - Key: Name
+        Value: PrivateSubnet2
+​
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+     Tags:
+      - Key: Name
+        Value: InternetGateway
+​
+  AttachGateway:
+   Type: AWS::EC2::VPCGatewayAttachment
+   Properties:
+    VpcId:
+      Ref: VPC
+    InternetGatewayId:
+      Ref: InternetGateway
+​
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: RouteTable
+​
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+       RouteTableId:
+         Ref: PublicRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: InternetGateway  
+​
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRouteTable
+​
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRouteTable
+         
+  EIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+​
+  NAT1:
+   Type: AWS::EC2::NatGateway
+   Properties:
+      AllocationId:
+         Fn::GetAtt:
+         - EIP1
+         - AllocationId
+      SubnetId:
+         Ref: PublicSubnet1
+      Tags:
+      - Key: Name
+        Value: NAT1
+​
+​
+​
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRouteTable
+​
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+       RouteTableId:
+         Ref: PrivateRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       NatGatewayId:
+         Ref: NAT1
+​
+​
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable
+​
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2
+      RouteTableId:
+        Ref: PrivateRouteTable
+​
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Inbound Traffic for http, https and ssh. All Outbound Traffic default"
+      VpcId: 
+       Ref: VPC
+      Tags:
+        - Key: Name
+          Value: Public Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+​
+  EC2Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+        ImageId: ami-0015a39e4b7c0966f
+        InstanceType: t3.large
+        KeyName: "fingo"
+        Tags:
+          - Key: Name
+            Value: Public EC2 Instance
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: "true"
+            DeviceIndex: "0"
+            GroupSet:
+              - Ref: "InstanceSecurityGroup"
+            SubnetId: 
+             Ref: PublicSubnet1
+        UserData:
+         Fn::Base64: |
+           #!/bin/bash -xe
+           sudo apt-get update -y 
+           sudo apt-get install nginx -y
+​
+​
+  EC2InstancePrivate:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0015a39e4b7c0966f
+      InstanceType: t3.large
+      KeyName: "fingo"
+      Tags:
+        - Key: Name
+          Value: Private EC2 Instance
+      # SecurityGroupIds:
+      #   - !GetAtt "InstanceSecurityGroup.GroupId"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: "InstanceSecurityGroupPrivate"
+          SubnetId: 
+           Ref: PrivateSubnet1
+​
+  InstanceSecurityGroupPrivate:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Inbound Traffic for ssh. All Outbound Traffic default"
+      VpcId: 
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: Private Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+​
+​
+  DBSubnetGroup: 
+    Properties: 
+      DBSubnetGroupDescription: description
+      SubnetIds: 
+        - Ref: PrivateSubnet1
+        - Ref: PrivateSubnet2
+      Tags: 
+        - Key: Name
+          Value: DBSubnetGroup
+    Type: "AWS::RDS::DBSubnetGroup"
+​
+  RDS:
+    Type: AWS::RDS::DBInstance
+    Properties: 
+      AllocatedStorage: 20 
+      AllowMajorVersionUpgrade: True
+      DBInstanceClass: db.t3.micro
+      DBInstanceIdentifier: RDS
+      DBName: postgresql
+      VPCSecurityGroups:  
+        - Ref: "InstanceSecurityGroup"
+      DBSubnetGroupName:
+        Ref: DBSubnetGroup
+      Engine: postgres
+      MasterUsername: postgres
+      MasterUserPassword: fingo1122
+      MultiAZ: true
+      PubliclyAccessible: false
+​
+​
+​
+​
+​
+      #cloudformation
+​
+      
+​
+​
+​
+​
+​
+​
