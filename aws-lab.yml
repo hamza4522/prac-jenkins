@@ -1,286 +1,350 @@
----
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Master stack: PathToMasterStackFile'
-Resources:
-  VPC: 
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      InstanceTenancy: default
-      Tags:
-       - Key: Name
-         Value: fingo
-​
-  PublicSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: VPC
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: "eu-west-2a"
-      Tags:
-      - Key: Name
-        Value: PublicSubnet1
-​
-  PublicSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: VPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: "eu-west-2b"
-      Tags:
-      - Key: Name
-        Value: PublicSubnet2
-​
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: VPC
-      CidrBlock: 10.0.3.0/24
-      AvailabilityZone: "eu-west-2a"
-      Tags:
-      - Key: Name
-        Value: PrivateSubnet1
-​
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: VPC
-      CidrBlock: 10.0.4.0/24
-      AvailabilityZone: "eu-west-2b"
-      Tags:
-      - Key: Name
-        Value: PrivateSubnet2
-​
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-     Tags:
-      - Key: Name
-        Value: InternetGateway
-​
-  AttachGateway:
-   Type: AWS::EC2::VPCGatewayAttachment
-   Properties:
-    VpcId:
-      Ref: VPC
-    InternetGatewayId:
-      Ref: InternetGateway
-​
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId:  
-        Ref: VPC
-      Tags:
-      - Key: Name
-        Value: RouteTable
-​
-  PublicRoute:
-    Type: AWS::EC2::Route
-    Properties:
-       RouteTableId:
-         Ref: PublicRouteTable
-       DestinationCidrBlock: 0.0.0.0/0
-       GatewayId:
-         Ref: InternetGateway  
-​
-  PublicSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId:
-        Ref: PublicSubnet1
-      RouteTableId:
-        Ref: PublicRouteTable
-​
-  PublicSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId:
-        Ref: PublicSubnet2
-      RouteTableId:
-        Ref: PublicRouteTable
-         
-  EIP1:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: VPC
-​
-  NAT1:
-   Type: AWS::EC2::NatGateway
-   Properties:
-      AllocationId:
-         Fn::GetAtt:
-         - EIP1
-         - AllocationId
-      SubnetId:
-         Ref: PublicSubnet1
-      Tags:
-      - Key: Name
-        Value: NAT1
-​
-​
-​
-  PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId:  
-        Ref: VPC
-      Tags:
-      - Key: Name
-        Value: PrivateRouteTable
-​
-  PrivateRoute1:
-    Type: AWS::EC2::Route
-    Properties:
-       RouteTableId:
-         Ref: PrivateRouteTable
-       DestinationCidrBlock: 0.0.0.0/0
-       NatGatewayId:
-         Ref: NAT1
-​
-​
-  PrivateSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId:
-        Ref: PrivateSubnet1
-      RouteTableId:
-        Ref: PrivateRouteTable
-​
-  PrivateSubnet2RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId:
-        Ref: PrivateSubnet2
-      RouteTableId:
-        Ref: PrivateRouteTable
-​
-  InstanceSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "Inbound Traffic for http, https and ssh. All Outbound Traffic default"
-      VpcId: 
-       Ref: VPC
-      Tags:
-        - Key: Name
-          Value: Public Security Group
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-​
-  EC2Instance:
-      Type: AWS::EC2::Instance
-      Properties:
-        ImageId: ami-0015a39e4b7c0966f
-        InstanceType: t3.large
-        KeyName: "fingo"
-        Tags:
-          - Key: Name
-            Value: Public EC2 Instance
-        NetworkInterfaces:
-          - AssociatePublicIpAddress: "true"
-            DeviceIndex: "0"
-            GroupSet:
-              - Ref: "InstanceSecurityGroup"
-            SubnetId: 
-             Ref: PublicSubnet1
-        UserData:
-         Fn::Base64: |
-           #!/bin/bash -xe
-           sudo apt-get update -y 
-           sudo apt-get install nginx -y
-​
-​
-  EC2InstancePrivate:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: ami-0015a39e4b7c0966f
-      InstanceType: t3.large
-      KeyName: "fingo"
-      Tags:
-        - Key: Name
-          Value: Private EC2 Instance
-      # SecurityGroupIds:
-      #   - !GetAtt "InstanceSecurityGroup.GroupId"
-      NetworkInterfaces:
-        - AssociatePublicIpAddress: "true"
-          DeviceIndex: "0"
-          GroupSet:
-            - Ref: "InstanceSecurityGroupPrivate"
-          SubnetId: 
-           Ref: PrivateSubnet1
-​
-  InstanceSecurityGroupPrivate:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "Inbound Traffic for ssh. All Outbound Traffic default"
-      VpcId: 
-        Ref: VPC
-      Tags:
-        - Key: Name
-          Value: Private Security Group
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-​
-​
-  DBSubnetGroup: 
-    Properties: 
-      DBSubnetGroupDescription: description
-      SubnetIds: 
-        - Ref: PrivateSubnet1
-        - Ref: PrivateSubnet2
-      Tags: 
-        - Key: Name
-          Value: DBSubnetGroup
-    Type: "AWS::RDS::DBSubnetGroup"
-​
-  RDS:
-    Type: AWS::RDS::DBInstance
-    Properties: 
-      AllocatedStorage: 20 
-      AllowMajorVersionUpgrade: True
-      DBInstanceClass: db.t3.micro
-      DBInstanceIdentifier: RDS
-      DBName: postgresql
-      VPCSecurityGroups:  
-        - Ref: "InstanceSecurityGroup"
-      DBSubnetGroupName:
-        Ref: DBSubnetGroup
-      Engine: postgres
-      MasterUsername: postgres
-      MasterUserPassword: fingo1122
-      MultiAZ: true
-      PubliclyAccessible: false
-​
-​
-​
-​
-​
-      #cloudformation
-​
+{
+  
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "This template create a VPC with Public and Private subnet",
+    "Parameters": {
+      "VpcCIDR": {
+        "Default": "10.0.0.0/16",
+        "Type": "String"
+      },
+      "PublicSubnet1CIDR": {
+        "Default": "10.0.1.0/24",
+        "Type": "String"
+      },
+
+      "PrivateSubnet1CIDR": {
+        "Default": "10.0.5.0/24",
+        "Type": "String"
+      },
+      "PrivateSubnet2CIDR": {
+        "Default": "10.0.7.3/24",
+        "Type": "String"
+      },
+      "KeyName": {
+        "Description": "SSH Keypair to login to the instance",
+        "Type": "AWS::EC2::KeyPair::KeyName",
+        "Default": "Bakhti"
+    },
+    "KeyName2": {
+      "Description": "SSH Keypair to login to the instance",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Default": "Bakhtiprivate"
+  }
+  },
+  
+    "Resources" : {
+   
+          "VPC" : {   "Type" : "AWS::EC2::VPC",
+          "Properties" : {
+              "CidrBlock": "10.0.0.0/16",
+              "InstanceTenancy": "default",
+              "EnableDnsSupport": true,
+              "EnableDnsHostnames": true,
+
+            "Tags": [{
+              "Key":"Name",
+              "Value":"VPC"
+            }]
+           }
+         },                     
+          
+
+        
+          "InternetGateway" : {
+          "Type" : "AWS::EC2::InternetGateway",
+          "Properties" : {
+            "Tags": [{
+              "Key":"Name",
+              "Value":"IGW"
+              }]
+                    }
+                  },
+  
+          "VPCGatewayAttachment": {
+              "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "Properties" : {
+            "InternetGatewayId" : {"Ref":"InternetGateway"},
+            "VpcId" : {"Ref":"VPC"}
+                    }
+                  },
+
+          "PubSub": {
+            
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                                
+            "AvailabilityZone" : "eu-west-2a",
+            "CidrBlock" : "10.0.1.0/24",
+            "MapPublicIpOnLaunch" : true,
+                                
+            "Tags" : [{
+              "Key":"Name",
+              "Value":"Public_Subnet_1"
+              }],
+            "VpcId" : {"Ref": "VPC"}
+                          }
+                  },         
+            
+          "PrivSub": {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+              "AvailabilityZone" : "eu-west-2b",
+              "CidrBlock" : "10.0.5.0/24",
+              "MapPublicIpOnLaunch" : false,
+              "Tags" : [{
+                "Key":"Name",
+                "Value":"Private_Subnet_1"
+                }],
+              "VpcId" : {"Ref": "VPC"}
+                              }
+                            },
+
+            "PrivSub2": {
+              "Type" : "AWS::EC2::Subnet",
+              "Properties" : {
+              "AvailabilityZone" : "eu-west-2c",
+              "CidrBlock" : "10.0.7.3/24",
+              "MapPublicIpOnLaunch" : false,
+              "Tags" : [{
+                "Key":"Name",
+                "Value":"Private_Subnet_2"
+                }],
+                "VpcId" : {"Ref": "VPC"}
+                    }
+                },
+
+          "Elastic": {
+                "Type" : "AWS::EC2::EIP",
+                "Properties" : {
       
-​
-​
-​
-​
-​
-​
+                    "Domain" : "VPC"
+                    }
+                  },
+          "NatGateway": {
+                    
+                  "Type" : "AWS::EC2::NatGateway",
+                  "Properties" : {
+                    "AllocationId" : { "Fn::GetAtt" : ["Elastic", "AllocationId"]},
+                    "SubnetId" : {"Ref":"PubSub"}
+                                  }
+                            
+                },
+
+          "RouteNat": {
+                  "Type" : "AWS::EC2::Route",
+                  "Properties" : {
+                  "DestinationCidrBlock": "0.0.0.0/0",
+                    "NatGatewayId": {"Ref":"NatGateway"},
+                    "RouteTableId": {"Ref":"PrivateRouteTable"}
+                    }
+                  },
+      
+          "PublicRouteTable": {
+          
+          "Type" : "AWS::EC2::RouteTable",
+          "Properties" : {
+            "Tags" : [{
+              "Key":"Name",
+              "Value":"PublicRouteTable"
+              }],
+            "VpcId" : {"Ref": "VPC"}
+                          }
+            },
+
+        "RoutePublic": {
+          "Type" : "AWS::EC2::Route",
+          "Properties" : {
+          "RouteTableId": {"Ref": "PublicRouteTable"},
+          "DestinationCidrBlock" : "0.0.0.0/0",
+          "GatewayId" : {"Ref":"InternetGateway"}
+                    }
+                  },
+
+        "PrivateRouteTable": {
+        "Type" : "AWS::EC2::RouteTable",
+        "Properties" : {
+        "Tags" : [{
+          "Key":"Name",
+          "Value":"PrivateRouteTable"
+          }],
+        "VpcId" : {"Ref": "VPC"}
+                          }
+            },
+      
+            "RoutePrivate": {
+              "Type" : "AWS::EC2::Route",
+              "Properties" : {
+              "RouteTableId": {"Ref": "PrivateRouteTable"},
+              "DestinationCidrBlock" : "10.0.5.0/24",
+              "NatGatewayId" : {"Ref":"NatGateway"}
+                        }
+                  },
+ 
+
+        "Association1": {
+          "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties" : {
+          "RouteTableId" : {"Ref":"PublicRouteTable"},
+          "SubnetId" :  {"Ref":"PubSub"}
+                            }
+          },
+          "Association3": {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties" : {
+              "RouteTableId" : {"Ref":"PrivateRouteTable"},
+              "SubnetId" : {"Ref":"PrivSub"}
+                            }
+            },
+
+        "Association2": {
+          "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+          "Properties" : {
+            "RouteTableId" : {"Ref":"PrivateRouteTable"},
+            "SubnetId" : {"Ref":"PrivSub2"}
+                          }
+          },
+
+        
+
+        "SG": {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+              "GroupDescription" : "Allow inbound traffic",
+              "Tags" : [{
+                "Key":"Name",
+                "Value":"allow_tls"
+                }],
+              "VpcId": {"Ref":"VPC"},            
+              "SecurityGroupIngress" : [ 
+              {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "CidrIp": "0.0.0.0/0"
+                },
+            {
+                "IpProtocol": "tcp",
+                "FromPort":3389,
+                "ToPort": 3389,
+                "CidrIp": "0.0.0.0/0"
+            },
+            {
+              "IpProtocol": "tcp",
+              "FromPort":80,
+              "ToPort": 80,
+              "CidrIp": "0.0.0.0/0"
+          },
+          {
+                "IpProtocol": "tcp",
+                "FromPort":443,
+                "ToPort": 443,
+                "CidrIp": "0.0.0.0/0"
+            }
+                ]
+                
+              }
+            },
+
+        "EC2Public": {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                                
+            "AvailabilityZone" : "eu-west-2a",
+            "EbsOptimized" : true,
+            "ImageId" : "ami-0100b57d679daec93",
+            "InstanceType" : "t4g.micro",
+            "Monitoring" : false,
+      
+            "SourceDestCheck" : true,
+            "Tenancy" : "default",
+            "KeyName" : {"Ref":"KeyName"},
+            "Tags": [{
+              "Key" : "Name",
+              "Value" : "Bakhti"
+            }],
+            "NetworkInterfaces": [ {
+              "AssociatePublicIpAddress": "true",
+              "DeviceIndex": "0",
+              "GroupSet": [{ "Ref" : "SG" }],
+              "SubnetId": { "Ref" : "PubSub" }
+            } ],
+            "UserData": { "Fn::Base64": {
+              "Fn::Sub":
+              "!#/bin/bash\nsudo apt-get update\nsudo apt-get install nginx -y\nsudo systemctl enable nginx\nsudo apt install mysql-server -y"
+              }
+              }
+                            
+              }
+            },
+
+        "EC2Private" :
+          {
+          "Type" : "AWS::EC2::Instance",
+          "Properties" : {
+                              
+          "AvailabilityZone" : "eu-west-2b",
+          "EbsOptimized" : true,
+          "ImageId" : "ami-0100b57d679daec93",
+          "InstanceType" : "t4g.micro",
+          "Monitoring" : false,
+          "SourceDestCheck" : true,
+          "Tenancy" : "default",
+          "KeyName" : {"Ref":"KeyName2"},
+          
+          "NetworkInterfaces": [ {
+            "AssociatePublicIpAddress": "true",
+            "DeviceIndex": "0",
+            "GroupSet": [{ "Ref" : "SG" }],
+            "SubnetId": { "Ref" : "PrivSub" }
+          }],
+            "Tags": [{
+              "Key" : "Name",
+              "Value" : "Bakhtiprivate"
+            }]
+          
+            }
+          },
+                          
+            
+          
+        "DBSubnetGroup":
+            {
+              "Type" : "AWS::RDS::DBSubnetGroup",
+              "Properties" : {
+                  "DBSubnetGroupDescription" : "DB Subnet Grouping",
+                  "DBSubnetGroupName" : "dbrds",
+                  "SubnetIds" : [{"Ref":"PrivSub"},{"Ref":"PrivSub2"}],
+                  "Tags" : [{
+                    "Key":"Name",
+                    "Value":"RDSDB"
+                  }]
+                }
+            },
+
+          "DBInstance" :
+            {
+              "Type" : "AWS::RDS::DBInstance",
+              "Properties" : {
+                  "AllocatedStorage" : 8,
+                  "BackupRetentionPeriod" : 1,
+                  "VPCSecurityGroups" : [{"Ref":"SG"}],
+                  "DBInstanceClass" : "db.t3.micro",
+                  "DBInstanceIdentifier" : "BakhtiRDS",
+                  "DBName" : "BakhRDS",
+                  "DBSubnetGroupName" : {"Ref":"DBSubnetGroup"},
+                  "Engine" : "MySql",
+                  "MasterUsername" : "root",
+                  "MasterUserPassword" : "112233445566778899",
+                  "MultiAZ" : true,
+                  "Port" : 3309,
+                  "PubliclyAccessible" : false,
+                  "Tags" : [{
+                    "Key":"Name",
+                    "Value": "DBSG"
+                  }]
+                }
+            }
+            
+          
+  }
+    }
