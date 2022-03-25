@@ -1,7 +1,7 @@
 {
   
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "This template create a hamza VPC with Public and Private subnet",
+    "Description": "This template create a test VPC with Public and Private subnet",
     "Parameters": {
       "VpcCIDR": {
         "Default": "10.0.0.0/16",
