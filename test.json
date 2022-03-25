@@ -23,12 +23,12 @@
       "KeyName": {
         "Description": "SSH Keypair to login to the instance",
         "Type": "AWS::EC2::KeyPair::KeyName",
-        "Default": "Bakhti"
+        "Default": "hamza"
     },
     "KeyName2": {
       "Description": "SSH Keypair to login to the instance",
       "Type": "AWS::EC2::KeyPair::KeyName",
-      "Default": "Bakhtiprivate"
+      "Default": "hamzaprivate"
   }
   },
   
